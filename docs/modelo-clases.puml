@@ -1,0 +1,124 @@
+@startuml modelo-clases
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+hide circle
+
+abstract class Usuario {
+  -id: String
+  -nombre: String
+  -email: String
+  +getId(): String
+  +getNombre(): String
+  +getEmail(): String
+}
+
+class Estudiante {
+  -carrera: String
+  +getCarrera(): String
+}
+
+class Docente {
+  -especialidad: String
+  -horarios: List<Horario>
+  +publicarHorario(fecha, horaInicio, horaFin): Horario
+  +getHorarios(): List<Horario>
+}
+
+class Horario {
+  -id: String
+  -fecha: LocalDate
+  -horaInicio: LocalTime
+  -horaFin: LocalTime
+  -estado: EstadoHorario
+  +seSolapaCon(otro: Horario): boolean
+  +marcarComoReservado(): void
+  +liberar(): void
+  +estaDisponible(): boolean
+}
+
+enum EstadoHorario {
+  DISPONIBLE
+  RESERVADO
+}
+
+class Reserva {
+  -id: String
+  -estado: EstadoReserva
+  +confirmar(): void
+  +cancelar(): void
+  +reprogramar(nuevoHorario: Horario): void
+}
+
+enum EstadoReserva {
+  PENDIENTE
+  CONFIRMADA
+  CANCELADA
+  REPROGRAMADA
+}
+
+interface Notificador {
+  +notificar(reserva: Reserva, evento: TipoEvento): void
+}
+
+class NotificadorEmail {
+  +notificar(reserva: Reserva, evento: TipoEvento): void
+}
+
+class NotificadorConsola {
+  +notificar(reserva: Reserva, evento: TipoEvento): void
+}
+
+enum TipoEvento {
+  RESERVA_CREADA
+  RESERVA_CONFIRMADA
+  RESERVA_CANCELADA
+  RESERVA_REPROGRAMADA
+}
+
+interface RepositorioReservas {
+  +guardar(reserva: Reserva): void
+  +buscarPorId(id: String): Optional<Reserva>
+  +listarPorEstudiante(estudiante: Estudiante): List<Reserva>
+}
+
+class RepositorioReservasEnMemoria {
+  -almacen: Map<String, Reserva>
+  +guardar(reserva: Reserva): void
+  +buscarPorId(id: String): Optional<Reserva>
+  +listarPorEstudiante(estudiante: Estudiante): List<Reserva>
+}
+
+class ServicioReservas {
+  -repositorio: RepositorioReservas
+  -notificador: Notificador
+  +crearReserva(estudiante: Estudiante, horario: Horario): Reserva
+  +confirmarReserva(idReserva: String): void
+  +cancelarReserva(idReserva: String): void
+  +reprogramarReserva(idReserva: String, nuevoHorario: Horario): void
+}
+
+' Generalizacion / herencia
+Usuario <|-- Estudiante
+Usuario <|-- Docente
+
+' Realizacion de interfaces
+Notificador <|.. NotificadorEmail
+Notificador <|.. NotificadorConsola
+RepositorioReservas <|.. RepositorioReservasEnMemoria
+
+' Asociaciones con multiplicidad
+Docente "1" -- "0..*" Horario : publica >
+Estudiante "1" -- "0..*" Reserva : solicita >
+Horario "1" -- "0..1" Reserva : ocupado por >
+Reserva "1" --> "1" EstadoReserva
+Horario "1" --> "1" EstadoHorario
+
+' Dependencias (uso via interfaz, no acoplamiento a implementacion concreta)
+ServicioReservas ..> RepositorioReservas : usa >
+ServicioReservas ..> Notificador : usa >
+ServicioReservas ..> TipoEvento
+NotificadorEmail ..> TipoEvento
+NotificadorConsola ..> TipoEvento
+
+@enduml
