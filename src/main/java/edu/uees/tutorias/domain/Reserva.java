@@ -1,74 +1,76 @@
 package edu.uees.tutorias.domain;
 
-import java.util.Objects;
-
-/**
- * Registra el encuentro entre un estudiante y un horario de un docente,
- * y protege las transiciones validas de su propio ciclo de vida.
- *
- * La Reserva es responsable unicamente de su estado (PENDIENTE,
- * CONFIRMADA, CANCELADA, REPROGRAMADA); no sabe como se notifica a los
- * usuarios ni como se persiste. Esa separacion es la que permite
- * cambiar el mecanismo de notificacion o de almacenamiento sin tocar
- * esta clase (baja acoplamiento con esas dos preocupaciones).
- */
 public class Reserva {
-
     private final String id;
     private final Estudiante estudiante;
+    private final Docente docente;
     private Horario horario;
+    private final String materia;
+    private final String modalidad;
+    private final String linkReunion;
+    private final String notas;
+    private final int recordatorioMinutos;
     private EstadoReserva estado;
 
-    public Reserva(String id, Estudiante estudiante, Horario horario) {
-        this.id = Objects.requireNonNull(id);
-        this.estudiante = Objects.requireNonNull(estudiante);
-        this.horario = Objects.requireNonNull(horario);
+    Reserva(ReservaBuilder builder) {
+        this.id = builder.id;
+        this.estudiante = builder.estudiante;
+        this.docente = builder.docente;
+        this.horario = builder.horario;
+        this.materia = builder.materia;
+        this.modalidad = builder.modalidad;
+        this.linkReunion = builder.linkReunion;
+        this.notas = builder.notas;
+        this.recordatorioMinutos = builder.recordatorioMinutos;
         this.estado = EstadoReserva.PENDIENTE;
+        this.horario.marcarComoReservado();
     }
 
     public void confirmar() {
         if (estado != EstadoReserva.PENDIENTE) {
-            throw new IllegalStateException("Solo una reserva PENDIENTE puede confirmarse");
+            throw new IllegalStateException("Solo una reserva PENDIENTE puede ser confirmada.");
         }
-        estado = EstadoReserva.CONFIRMADA;
+        this.estado = EstadoReserva.CONFIRMADA;
     }
 
     public void cancelar() {
         if (estado == EstadoReserva.CANCELADA) {
-            throw new IllegalStateException("La reserva ya esta cancelada");
+            throw new IllegalStateException("La reserva ya está cancelada.");
         }
-        horario.liberar();
-        estado = EstadoReserva.CANCELADA;
+        this.estado = EstadoReserva.CANCELADA;
+        this.horario.liberar();
     }
 
     public void reprogramar(Horario nuevoHorario) {
-        if (estado == EstadoReserva.CANCELADA) {
-            throw new IllegalStateException("No se puede reprogramar una reserva cancelada");
+        if (nuevoHorario.getEstado() != EstadoHorario.DISPONIBLE) {
+            throw new IllegalStateException("El nuevo horario no está disponible.");
         }
-        horario.liberar();
-        nuevoHorario.marcarComoReservado();
+        this.horario.liberar();
         this.horario = nuevoHorario;
+        this.horario.marcarComoReservado();
         this.estado = EstadoReserva.REPROGRAMADA;
     }
 
-    public String getId() {
-        return id;
-    }
-
-    public Estudiante getEstudiante() {
-        return estudiante;
-    }
-
-    public Horario getHorario() {
-        return horario;
-    }
-
-    public EstadoReserva getEstado() {
-        return estado;
-    }
+    public String getId() { return id; }
+    public Estudiante getEstudiante() { return estudiante; }
+    public Docente getDocente() { return docente; }
+    public Horario getHorario() { return horario; }
+    public String getMateria() { return materia; }
+    public String getModalidad() { return modalidad; }
+    public String getLinkReunion() { return linkReunion; }
+    public String getNotas() { return notas; }
+    public int getRecordatorioMinutos() { return recordatorioMinutos; }
+    public EstadoReserva getEstado() { return estado; }
 
     @Override
     public String toString() {
-        return "Reserva{" + id + ", " + estudiante.getNombre() + ", " + estado + "}";
+        return "Reserva {" +
+                "id='" + id + '\'' +
+                ", estudiante=" + estudiante.getNombre() +
+                ", docente=" + docente.getNombre() +
+                ", materia='" + materia + '\'' +
+                ", modalidad='" + modalidad + '\'' +
+                ", estado=" + estado +
+                '}';
     }
 }

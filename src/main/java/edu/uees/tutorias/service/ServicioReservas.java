@@ -1,68 +1,73 @@
 package edu.uees.tutorias.service;
 
-import edu.uees.tutorias.domain.Estudiante;
-import edu.uees.tutorias.domain.Horario;
-import edu.uees.tutorias.domain.Reserva;
-import edu.uees.tutorias.notification.Notificador;
-import edu.uees.tutorias.notification.TipoEvento;
+import edu.uees.tutorias.domain.*;
+import edu.uees.tutorias.observer.ReservaObserver;
 import edu.uees.tutorias.repository.RepositorioReservas;
+import edu.uees.tutorias.strategy.EstrategiaCancelacion;
+import edu.uees.tutorias.strategy.ResultadoCancelacion;
 
-import java.util.Optional;
-import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
 
-/**
- * Orquesta el ciclo de vida de una reserva: crear, confirmar, cancelar
- * y reprogramar. No conoce como se guarda una reserva ni como se
- * notifica a un estudiante: recibe esas dos capacidades por
- * constructor como interfaces (RepositorioReservas y Notificador).
- *
- * Esta separacion es la aplicacion concreta de SRP y DIP mencionada
- * en la Parte 4: ServicioReservas tiene una unica razon de cambio
- * (las reglas del proceso de reserva) y no depende de detalles de
- * infraestructura.
- */
 public class ServicioReservas {
-
     private final RepositorioReservas repositorio;
-    private final Notificador notificador;
+    private final List<ReservaObserver> observers = new ArrayList<>();
 
-    public ServicioReservas(RepositorioReservas repositorio, Notificador notificador) {
+    public ServicioReservas(RepositorioReservas repositorio) {
         this.repositorio = repositorio;
-        this.notificador = notificador;
     }
 
-    public Reserva crearReserva(Estudiante estudiante, Horario horario) {
-        if (!horario.estaDisponible()) {
-            throw new IllegalStateException("El horario " + horario.getId() + " no esta disponible");
+    public void agregarObserver(ReservaObserver observer) {
+        this.observers.add(observer);
+    }
+
+    public void removerObserver(ReservaObserver observer) {
+        this.observers.remove(observer);
+    }
+
+    private void notificarObservers(Reserva reserva, EstadoReserva anterior, EstadoReserva nuevo, String motivo) {
+        for (ReservaObserver obs : observers) {
+            obs.alCambiarEstadoReserva(reserva, anterior, nuevo, motivo);
         }
-        horario.marcarComoReservado();
-        Reserva reserva = new Reserva(UUID.randomUUID().toString(), estudiante, horario);
+    }
+
+    public void registrarReserva(Reserva reserva) {
         repositorio.guardar(reserva);
-        notificador.notificar(reserva, TipoEvento.RESERVA_CREADA);
-        return reserva;
+        System.out.println("-> Reserva " + reserva.getId() + " registrada correctamente.");
     }
 
-    public void confirmarReserva(String idReserva) {
-        Reserva reserva = obtenerOFallar(idReserva);
+    public void confirmarReserva(String reservaId) {
+        Reserva reserva = repositorio.buscarPorId(reservaId)
+                .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada: " + reservaId));
+        
+        EstadoReserva anterior = reserva.getEstado();
         reserva.confirmar();
-        notificador.notificar(reserva, TipoEvento.RESERVA_CONFIRMADA);
+        notificarObservers(reserva, anterior, reserva.getEstado(), "Confirmación realizada por el sistema");
     }
 
-    public void cancelarReserva(String idReserva) {
-        Reserva reserva = obtenerOFallar(idReserva);
-        reserva.cancelar();
-        notificador.notificar(reserva, TipoEvento.RESERVA_CANCELADA);
+    public ResultadoCancelacion cancelarReserva(String reservaId, int horasAnticipacion, EstrategiaCancelacion estrategia, String motivo) {
+        Reserva reserva = repositorio.buscarPorId(reservaId)
+                .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada: " + reservaId));
+
+        ResultadoCancelacion resultado = estrategia.evaluarCancelacion(reserva, horasAnticipacion);
+
+        if (resultado.isExitosa()) {
+            EstadoReserva anterior = reserva.getEstado();
+            reserva.cancelar();
+            notificarObservers(reserva, anterior, reserva.getEstado(), motivo + " (" + resultado.getMensaje() + ")");
+        } else {
+            System.out.println("-> CANCELACIÓN RECHAZADA: " + resultado.getMensaje());
+        }
+
+        return resultado;
     }
 
-    public void reprogramarReserva(String idReserva, Horario nuevoHorario) {
-        Reserva reserva = obtenerOFallar(idReserva);
+    public void reprogramarReserva(String reservaId, Horario nuevoHorario, String motivo) {
+        Reserva reserva = repositorio.buscarPorId(reservaId)
+                .orElseThrow(() -> new IllegalArgumentException("Reserva no encontrada: " + reservaId));
+
+        EstadoReserva anterior = reserva.getEstado();
         reserva.reprogramar(nuevoHorario);
-        notificador.notificar(reserva, TipoEvento.RESERVA_REPROGRAMADA);
-    }
-
-    private Reserva obtenerOFallar(String idReserva) {
-        Optional<Reserva> reserva = repositorio.buscarPorId(idReserva);
-        return reserva.orElseThrow(() ->
-                new IllegalArgumentException("No existe una reserva con id " + idReserva));
+        notificarObservers(reserva, anterior, reserva.getEstado(), motivo);
     }
 }
