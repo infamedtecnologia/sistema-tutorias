@@ -1,124 +1,121 @@
-# Sistema de Gestión de Tutorías
+# Sistema de Gestión de Tutorías — Incremento 1 (Actividad Ae3)
 
 **Repositorio GitHub:** [https://github.com/infamedtecnologia/sistema-tutorias](https://github.com/infamedtecnologia/sistema-tutorias)
 
-Proyecto académico de la actividad **Ae1 · Diseño orientado a objetos de un
-sistema** (UCOM0310 · Diseño de Software · UEES). Modela, mediante
-principios de orientación a objetos, el proceso de solicitud, confirmación,
-cancelación y reprogramación de tutorías entre estudiantes y docentes.
+Proyecto integrador para la actividad **Ae3 · Incremento 1 del proyecto integrador** (UCOM0310 · Diseño de Software · UEES). Evoluciona el diseño de las actividades Ae1 y Ae2 incorporando los patrones creacionales y del comportamiento de la Semana 4 (**Factory Method**, **Builder**, **Observer** y **Strategy**).
 
-## Descripción del problema
+---
 
-El sistema debe permitir que:
-- los **docentes** publiquen horarios disponibles para tutorías;
-- los **estudiantes** soliciten (reserven) uno de esos horarios;
-- cada **reserva** siga un ciclo de vida controlado (pendiente → confirmada
-  / cancelada / reprogramada);
-- los eventos relevantes (creación, confirmación, cancelación,
-  reprogramación) se comuniquen a los usuarios sin acoplar la lógica de
-  dominio a un canal de notificación específico;
-- la información se persista sin acoplar el dominio a una tecnología de
-  almacenamiento concreta.
+## 1. Propósito y Alcance del Incremento 1
 
-## Clases principales y responsabilidades
+El Incremento 1 del Sistema de gestión de tutorías evoluciona el modelo del dominio resolviendo problemas reales de arquitectura y comunicación:
+1. **Recuperación de Ae1 y Ae2**: Se mantiene la jerarquía de entidades (`Usuario`, `Estudiante`, `Docente`, `Horario`, `Reserva`) y los patrones **Factory Method** (canales de notificación) y **Builder** (construcción fluida de reservas con validaciones).
+2. **Integración del Patrón Observer (Semana 4)**: Permite que ante cualquier cambio de estado en una `Reserva` (confirmación, cancelación, reprogramación), múltiples componentes desacoplados reaccionen automáticamente (enviar notificaciones, registrar auditoría en bitácora y actualizar la agenda del docente).
+3. **Integración del Patrón Strategy (Semana 4)**: Permite evaluar dinámicamente las políticas de cancelación de tutorías (`CancelacionEstandarStrategy`, `CancelacionTardiaStrategy`, `CancelacionPrioritariaStrategy`) calculando retenciones o penalizaciones según la anticipación del evento.
 
-| Clase / Interfaz | Responsabilidad |
-|---|---|
-| `Usuario` (abstracta) | Identidad y datos de contacto comunes a estudiantes y docentes. |
-| `Estudiante` | Representa al solicitante de una tutoría. |
-| `Docente` | Publica horarios y protege que no se solapen entre sí. |
-| `Horario` | Protege su propio estado de disponibilidad (`DISPONIBLE` / `RESERVADO`). |
-| `Reserva` | Controla las transiciones válidas de su ciclo de vida. |
-| `Notificador` (interfaz) | Abstracción para comunicar eventos de una reserva. |
-| `NotificadorEmail` / `NotificadorConsola` | Implementaciones concretas del canal de notificación. |
-| `RepositorioReservas` (interfaz) | Abstracción de persistencia de reservas. |
-| `RepositorioReservasEnMemoria` | Implementación de persistencia usada en desarrollo/pruebas. |
-| `ServicioReservas` | Orquesta el caso de uso: crear, confirmar, cancelar y reprogramar reservas. |
+---
 
-## Decisiones de diseño relevantes
+## 2. Justificación de los Patrones Utilizados
 
-- **Encapsulación real, no solo getters/setters:** `Horario` no expone un
-  `setEstado()`; solo permite `marcarComoReservado()` y `liberar()`, que
-  validan la transición. Lo mismo ocurre con `Reserva` y sus estados.
-- **Composición sobre herencia** entre `ServicioReservas` y sus
-  colaboradores (`RepositorioReservas`, `Notificador`): se inyectan por
-  constructor en lugar de heredar comportamiento.
-- **Herencia solo donde hay una relación "es-un" real:** `Estudiante` y
-  `Docente` heredan de `Usuario` porque ambos son, genuinamente, un tipo de
-  usuario del sistema con identidad y contacto comunes — no se usó herencia
-  como atajo para reutilizar código entre clases sin relación conceptual.
+| Elemento | Patrón 1: Observer | Patrón 2: Strategy |
+|---|---|---|
+| **Problema real** | Al cambiar el estado de una reserva, se requería invocar manualmente múltiples servicios no relacionados. | Las reglas y sanciones por cancelación de tutorías variaban con condicionales rígidos según el tipo de tutoría y tiempo de anticipación. |
+| **Contexto** | Reacción ante eventos del ciclo de vida de `Reserva`. | Procesamiento de cancelaciones en `ServicioReservas`. |
+| **Qué cambia** | Las acciones secundarias ante un cambio de estado (notificación, auditoría, agenda). | Las reglas de cálculo y sanciones de cancelación. |
+| **Qué permanece estable** | El dominio de `Reserva` y la orquestación principal del servicio. | La estructura general de cancelación y liberación de horarios. |
+| **Patrón seleccionado** | **Observer (Comportamental)** | **Strategy (Comportamental)** |
+| **Clases implicadas** | `ReservaObserver`, `NotificacionObserver`, `AuditoriaObserver`, `CalendarioObserver`, `ServicioReservas`. | `EstrategiaCancelacion`, `ResultadoCancelacion`, `CancelacionEstandarStrategy`, `CancelacionTardiaStrategy`, `CancelacionPrioritariaStrategy`. |
+| **Principio SOLID** | Single Responsibility Principle (SRP) y Open/Closed Principle (OCP). | Open/Closed Principle (OCP) y Dependency Inversion Principle (DIP). |
+| **Beneficio esperado** | Desacoplamiento total entre el sujeto (`ServicioReservas`) y los receptores de eventos. | Facilidad para añadir nuevas reglas de cancelación sin tocar el servicio. |
+| **Costo / compromiso** | Notificaciones asíncronas requieren gestionar el orden de ejecución de observadores. | El cliente debe pasar la estrategia adecuada según el contexto. |
+| **Verificación** | Pruebas unitarias en `ObserverTest` validando el disparo de eventos. | Pruebas unitarias en `StrategyTest` comprobando penalizaciones y bloqueos. |
 
-## Principios SOLID aplicados
+---
 
-- **DIP (Dependency Inversion Principle):** `ServicioReservas` depende de
-  las interfaces `Notificador` y `RepositorioReservas`, nunca de una
-  implementación concreta. Esto permite cambiar el canal de notificación o
-  el mecanismo de persistencia sin tocar la lógica de negocio.
-- **SRP (Single Responsibility Principle):** `ServicioReservas` solo
-  orquesta el ciclo de vida de la reserva; `Docente` solo administra sus
-  horarios; `Notificador` solo sabe comunicar eventos. Ningún componente
-  mezcla dos razones de cambio distintas.
-- **OCP (Open/Closed Principle):** agregar un canal de notificación nuevo
-  (por ejemplo `NotificadorConsola`, ya incluido) no requiere modificar
-  `Notificador` ni `ServicioReservas`.
-- **ISP (Interface Segregation Principle):** `Notificador` expone un único
-  método (`notificar`), evitando forzar a las implementaciones a resolver
-  responsabilidades que no les corresponden.
-
-Ver justificación ampliada en el PDF de la actividad, sección 4.
-
-## Diagrama UML
-
-Fuente editable: [`docs/modelo-clases.puml`](docs/modelo-clases.puml)
-Imagen: [`docs/modelo-clases.png`](docs/modelo-clases.png)
-
-## Requisitos para ejecutar el proyecto
-
-- JDK 17 o superior
-- Maven 3.8+
-
-## Compilación
-
-```bash
-mvn clean compile
-```
-
-## Pruebas
-
-```bash
-mvn clean test
-```
-
-## Ejecución de la demostración
-
-```bash
-mvn compile exec:java -Dexec.mainClass="edu.uees.tutorias.Main"
-```
-
-## Estructura del repositorio
+## 3. Estructura del Repositorio y Paquetes
 
 ```
 sistema-tutorias/
 ├── README.md
 ├── pom.xml
 ├── docs/
-│   ├── modelo-clases.puml
-│   └── modelo-clases.png
+│   ├── uml-incremento1.puml
+│   └── uml-incremento1.png
 └── src/
     ├── main/java/edu/uees/tutorias/
     │   ├── Main.java
     │   ├── domain/
-    │   ├── service/
-    │   ├── notification/
-    │   └── repository/
-    └── test/java/edu/uees/tutorias/service/
+    │   │   ├── Usuario.java
+    │   │   ├── Estudiante.java
+    │   │   ├── Docente.java
+    │   │   ├── Horario.java
+    │   │   ├── EstadoHorario.java
+    │   │   ├── EstadoReserva.java
+    │   │   ├── Reserva.java
+    │   │   └── ReservaBuilder.java  (Builder)
+    │   ├── factory/                 (Factory Method)
+    │   │   ├── Notificador.java
+    │   │   ├── NotificadorEmail.java
+    │   │   ├── NotificadorSMS.java
+    │   │   ├── NotificadorWhatsApp.java
+    │   │   ├── NotificadorTeams.java
+    │   │   ├── NotificadorFactory.java
+    │   │   └── creadores concretos...
+    │   ├── observer/                (Observer)
+    │   │   ├── ReservaObserver.java
+    │   │   ├── NotificacionObserver.java
+    │   │   ├── AuditoriaObserver.java
+    │   │   └── CalendarioObserver.java
+    │   ├── strategy/                (Strategy)
+    │   │   ├── EstrategiaCancelacion.java
+    │   │   ├── ResultadoCancelacion.java
+    │   │   ├── CancelacionEstandarStrategy.java
+    │   │   ├── CancelacionTardiaStrategy.java
+    │   │   └── CancelacionPrioritariaStrategy.java
+    │   ├── repository/
+    │   │   ├── RepositorioReservas.java
+    │   │   └── RepositorioReservasEnMemoria.java
+    │   └── service/
+    │       └── ServicioReservas.java
+    └── test/java/edu/uees/tutorias/
+        ├── domain/ReservaBuilderTest.java
+        ├── factory/FactoryMethodTest.java
+        ├── observer/ObserverTest.java
+        ├── strategy/StrategyTest.java
+        └── service/ServicioReservasTest.java
 ```
 
-## Declaración de uso de inteligencia artificial
+---
 
-Durante el desarrollo de esta actividad utilicé herramientas de
-inteligencia artificial. Las utilicé para: organizar el análisis del
-dominio, revisar la consistencia entre el diagrama UML y el código Java, y
-recibir retroalimentación sobre la aplicación de principios SOLID. Verifiqué
-y adapté las respuestas obtenidas, y puedo explicar y justificar el código
-y las decisiones presentadas.
+## 4. Diagrama UML de Clases (Incremento 1)
+
+El diagrama completo se encuentra en la carpeta `docs/`:
+- **Fuente PlantUML:** [`docs/uml-incremento1.puml`](docs/uml-incremento1.puml)
+- **Imagen PNG (Grayscale):** [`docs/uml-incremento1.png`](docs/uml-incremento1.png)
+
+![Diagrama UML Incremento 1](docs/uml-incremento1.png)
+
+---
+
+## 5. Guía de Compilación y Ejecución (Maven)
+
+### Compilar el proyecto:
+```bash
+mvn clean compile
+```
+
+### Ejecutar las pruebas unitarias automatizadas (JUnit 5):
+```bash
+mvn clean test
+```
+
+### Ejecutar la clase principal de demostración:
+```bash
+mvn exec:java
+```
+
+---
+
+## 6. Declaración de Uso de Inteligencia Artificial
+
+Durante el desarrollo de esta actividad utilicé herramientas de inteligencia artificial. Las utilicé para: organizar la estructura de diagramas UML PlantUML del Incremento 1, revisar la consistencia de las pruebas unitarias JUnit 5 y redactar las justificaciones técnicas en el informe y README. Verifiqué, probé y adapté el código Java y las decisiones de diseño presentadas.
