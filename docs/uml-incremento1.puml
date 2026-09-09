@@ -1,0 +1,150 @@
+@startuml uml-incremento1
+package "edu.uees.tutorias.domain" {
+    abstract class Usuario {
+        - id: String
+        - nombre: String
+        - email: String
+        + getId(): String
+        + getNombre(): String
+        + getEmail(): String
+    }
+
+    class Estudiante extends Usuario {
+        - carrera: String
+        + getCarrera(): String
+    }
+
+    class Docente extends Usuario {
+        - especialidad: String
+        - horariosPublicados: List<Horario>
+        + publicarHorario(h: Horario): void
+        + getHorariosPublicados(): List<Horario>
+    }
+
+    enum EstadoHorario {
+        DISPONIBLE
+        RESERVADO
+    }
+
+    class Horario {
+        - id: String
+        - fecha: String
+        - horaInicio: String
+        - horaFin: String
+        - estado: EstadoHorario
+        + marcarComoReservado(): void
+        + liberar(): void
+        + seSolapaCon(otro: Horario): boolean
+    }
+
+    enum EstadoReserva {
+        PENDIENTE
+        CONFIRMADA
+        CANCELADA
+        REPROGRAMADA
+    }
+
+    class Reserva {
+        - id: String
+        - estudiante: Estudiante
+        - docente: Docente
+        - horario: Horario
+        - materia: String
+        - modalidad: String
+        - linkReunion: String
+        - estado: EstadoReserva
+        + confirmar(): void
+        + cancelar(): void
+        + reprogramar(nuevoHorario: Horario): void
+    }
+
+    class ReservaBuilder <<Builder>> {
+        ~ id: String
+        ~ estudiante: Estudiante
+        ~ docente: Docente
+        ~ horario: Horario
+        ~ materia: String
+        ~ modalidad: String
+        + {static} de(...): ReservaBuilder
+        + conMateria(m: String): ReservaBuilder
+        + conModalidad(m: String): ReservaBuilder
+        + conLinkReunion(l: String): ReservaBuilder
+        + build(): Reserva
+    }
+
+    Horario *-right- EstadoHorario
+    Reserva *-down- EstadoReserva
+    ReservaBuilder ..> Reserva : <<builds>>
+}
+
+package "edu.uees.tutorias.factory" {
+    interface Notificador <<Product>> {
+        + enviar(dest: String, msg: String): void
+        + getCanal(): String
+    }
+
+    class NotificadorEmail implements Notificador
+    class NotificadorSMS implements Notificador
+    class NotificadorWhatsApp implements Notificador
+    class NotificadorTeams implements Notificador
+
+    abstract class NotificadorFactory <<Creator>> {
+        + {abstract} crearNotificador(): Notificador
+        + notificarUsuario(dest: String, msg: String): void
+    }
+
+    class NotificadorEmailFactory extends NotificadorFactory
+    class NotificadorSMSFactory extends NotificadorFactory
+    class NotificadorWhatsAppFactory extends NotificadorFactory
+    class NotificadorTeamsFactory extends NotificadorFactory
+
+    NotificadorFactory ..> Notificador : <<instantiates>>
+}
+
+package "edu.uees.tutorias.observer" {
+    interface ReservaObserver <<Observer>> {
+        + alCambiarEstadoReserva(r: Reserva, ant: EstadoReserva, nuevo: EstadoReserva, motivo: String): void
+    }
+
+    class NotificacionObserver implements ReservaObserver {
+        - factory: NotificadorFactory
+    }
+    class AuditoriaObserver implements ReservaObserver
+    class CalendarioObserver implements ReservaObserver
+
+    NotificacionObserver --> NotificadorFactory : <<uses>>
+}
+
+package "edu.uees.tutorias.strategy" {
+    interface EstrategiaCancelacion <<Strategy>> {
+        + evaluarCancelacion(r: Reserva, horas: int): ResultadoCancelacion
+    }
+
+    class ResultadoCancelacion {
+        - exitosa: boolean
+        - porcentajePenalizacion: double
+        - mensaje: String
+    }
+
+    class CancelacionEstandarStrategy implements EstrategiaCancelacion
+    class CancelacionTardiaStrategy implements EstrategiaCancelacion
+    class CancelacionPrioritariaStrategy implements EstrategiaCancelacion
+
+    EstrategiaCancelacion ..> ResultadoCancelacion : <<creates>>
+}
+
+package "edu.uees.tutorias.service" {
+    class ServicioReservas {
+        - repositorio: RepositorioReservas
+        - observers: List<ReservaObserver>
+        + agregarObserver(obs: ReservaObserver): void
+        + registrarReserva(r: Reserva): void
+        + confirmarReserva(id: String): void
+        + cancelarReserva(id: String, horas: int, est: EstrategiaCancelacion, motivo: String): ResultadoCancelacion
+    }
+
+    ServicioReservas "1" o-- "*" ReservaObserver : <<notifies>>
+    ServicioReservas ..> EstrategiaCancelacion : <<uses>>
+}
+
+@enduml
